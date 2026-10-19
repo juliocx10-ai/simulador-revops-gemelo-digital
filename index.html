@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DryVentures · Gemelo Digital RevOps · Fase 1</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://unpkg.com/lucide@0.453.0/dist/umd/lucide.min.js"></script>
+<style>
+  body{background:#0b1620;color:#dbe7ee;font-family:'Segoe UI',system-ui,-apple-system,sans-serif}
+  .panel{background:#10202d;border:1px solid #1c3446;border-radius:10px}
+  input[type=range]{width:100%;accent-color:#2dd4bf}
+  input[type=number]{background:#0b1620;border:1px solid #24435a;border-radius:6px;padding:4px 8px;width:100%;color:#dbe7ee}
+  .kpi-num{font-variant-numeric:tabular-nums;letter-spacing:-0.02em}
+  button:focus-visible,input:focus-visible{outline:2px solid #2dd4bf;outline-offset:2px}
+</style>
+</head>
+<body class="min-h-screen">
+<header class="px-5 md:px-8 py-5 border-b border-[#1c3446] flex flex-wrap items-center justify-between gap-3">
+  <div class="flex items-center gap-3">
+    <div class="w-10 h-10 rounded-lg bg-teal-400/15 text-teal-300 flex items-center justify-center"><i data-lucide="waves"></i></div>
+    <div>
+      <h1 class="text-xl font-semibold">DryVentures · Gemelo Digital de RevOps</h1>
+      <p class="text-sm text-slate-400">Fase 1: stock sano. Simulación estocástica de 365 días, modelo reactivo frente a modelo predictivo.</p>
+    </div>
+  </div>
+  <div class="flex flex-wrap gap-3 text-xs text-slate-300">
+    <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm" style="background:#38bdf8aa"></span>Campaña de marketing</span>
+    <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm" style="background:#fb923caa"></span>Temporada alta</span>
+  </div>
+</header>
+
+<main class="p-5 md:p-8 grid gap-6 lg:grid-cols-[300px_1fr]">
+  <!-- Panel de control -->
+  <aside class="panel p-5 h-fit space-y-5 lg:sticky lg:top-4">
+    <h2 class="font-semibold flex items-center gap-2"><i data-lucide="sliders-horizontal" class="w-4 h-4 text-teal-300"></i>Parámetros</h2>
+    <div>
+      <label class="text-sm flex justify-between" for="init"><span>Inventario inicial</span><b id="v-init"></b></label>
+      <input id="init" type="range" min="200" max="5000" step="100" value="1500">
+    </div>
+    <div>
+      <label class="text-sm flex justify-between" for="cap"><span>Capacidad de bodega</span><b id="v-cap"></b></label>
+      <input id="cap" type="range" min="2000" max="12000" step="500" value="5000">
+    </div>
+    <div>
+      <label class="text-sm flex justify-between" for="lt"><span>Lead time de fabricación</span><b id="v-lt"></b></label>
+      <input id="lt" type="range" min="7" max="14" step="1" value="10">
+    </div>
+    <div>
+      <label class="text-sm flex justify-between" for="sens"><span>Sensibilidad IA RevOps</span><b id="v-sens"></b></label>
+      <input id="sens" type="range" min="0" max="100" step="5" value="75">
+      <p class="text-xs text-slate-400 mt-1">Más sensibilidad: previsión más precisa y mayor colchón de seguridad.</p>
+    </div>
+    <div>
+      <label class="text-sm flex justify-between" for="base"><span>Demanda base diaria (uds.)</span><b id="v-base"></b></label>
+      <input id="base" type="range" min="40" max="300" step="10" value="100">
+    </div>
+    <div>
+      <label class="text-sm block mb-1" for="seed">Semilla aleatoria</label>
+      <input id="seed" type="number" value="2026">
+    </div>
+    <button id="run" class="w-full bg-teal-400 hover:bg-teal-300 text-slate-900 font-semibold rounded-lg py-2.5 flex items-center justify-center gap-2">
+      <i data-lucide="play" class="w-4 h-4"></i>Ejecutar simulación
+    </button>
+    <button id="rand" class="w-full border border-[#24435a] hover:bg-[#162c3d] rounded-lg py-2 text-sm flex items-center justify-center gap-2">
+      <i data-lucide="dices" class="w-4 h-4"></i>Nueva semilla y ejecutar
+    </button>
+    <div class="text-xs text-slate-400 border-t border-[#1c3446] pt-3 leading-relaxed">
+      Supuestos económicos: margen perdido por venta no atendida 22 € por unidad; coste de mantener inventario 0,12 € por unidad y día.
+    </div>
+  </aside>
+
+  <!-- Resultados -->
+  <section class="space-y-6 min-w-0">
+    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div class="panel p-4">
+        <div class="text-sm text-slate-400 flex items-center gap-2"><i data-lucide="package-check" class="w-4 h-4"></i>Pedidos atendidos (Gemelo)</div>
+        <div id="k-served" class="kpi-num text-3xl font-semibold mt-2">-</div>
+        <div id="k-served-sub" class="text-xs text-slate-400 mt-1"></div>
+      </div>
+      <div class="panel p-4">
+        <div class="text-sm text-slate-400 flex items-center gap-2"><i data-lucide="gauge" class="w-4 h-4"></i>Tasa de servicio (Fill Rate)</div>
+        <div id="k-fill" class="kpi-num text-3xl font-semibold mt-2 text-teal-300">-</div>
+        <div id="k-fill-sub" class="text-xs text-slate-400 mt-1"></div>
+      </div>
+      <div class="panel p-4">
+        <div class="text-sm text-slate-400 flex items-center gap-2"><i data-lucide="shield-check" class="w-4 h-4"></i>Días de stock-out evitados</div>
+        <div id="k-days" class="kpi-num text-3xl font-semibold mt-2">-</div>
+        <div id="k-days-sub" class="text-xs text-slate-400 mt-1"></div>
+      </div>
+      <div class="panel p-4">
+        <div class="text-sm text-slate-400 flex items-center gap-2"><i data-lucide="euro" class="w-4 h-4"></i>Ahorro económico total</div>
+        <div id="k-save" class="kpi-num text-3xl font-semibold mt-2 text-amber-300">-</div>
+        <div id="k-save-sub" class="text-xs text-slate-400 mt-1"></div>
+      </div>
+    </div>
+
+    <div id="insight" class="panel p-4 text-sm text-slate-300 flex gap-3 items-start">
+      <i data-lucide="lightbulb" class="w-5 h-5 text-amber-300 shrink-0 mt-0.5"></i><span></span>
+    </div>
+
+    <div class="panel p-4">
+      <h3 class="font-semibold mb-1">Nivel de inventario diario</h3>
+      <p class="text-xs text-slate-400 mb-3">Modelo tradicional (reactivo) frente a Gemelo Digital RevOps, con el ROP dinámico de la IA.</p>
+      <div class="h-[340px]"><canvas id="c1"></canvas></div>
+    </div>
+
+    <div class="grid gap-6 xl:grid-cols-2">
+      <div class="panel p-4">
+        <h3 class="font-semibold mb-1">Unidades atendidas y ventas perdidas por mes</h3>
+        <p class="text-xs text-slate-400 mb-3">Líneas: unidades atendidas (eje izquierdo). Barras: ventas perdidas por stock-out (eje derecho).</p>
+        <div class="h-[300px]"><canvas id="c2"></canvas></div>
+      </div>
+      <div class="panel p-4">
+        <h3 class="font-semibold mb-1">Ahorro financiero acumulado (€)</h3>
+        <p class="text-xs text-slate-400 mb-3">Ventas recuperadas más coste de almacenamiento evitado.</p>
+        <div class="h-[300px]"><canvas id="c3"></canvas></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+const ML=[31,28,31,30,31,30,31,31,30,31,30,31];
+const MN=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+const CAMP=[0,1,6,7], PEAK_START=304;
+const MARGIN=22, HOLD=0.12;
+const monthOf=[], monthStart=[];
+ML.forEach((n,m)=>{monthStart.push(monthOf.length);for(let i=0;i<n;i++)monthOf.push(m)});
+const isCamp=m=>CAMP.includes(m);
+const $=id=>document.getElementById(id);
+const fmt=n=>Math.round(n).toLocaleString('es-ES');
+const eur=n=>Math.round(n).toLocaleString('es-ES')+' €';
+
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+
+function simulate(p){
+  const R=rng(p.seed);
+  const G=()=>Math.sqrt(-2*Math.log(1-R()))*Math.cos(2*Math.PI*R());
+  const campMult=ML.map((_,m)=>isCamp(m)?1.3+0.1*R():1);       // +30% a +40% en B2C
+  const fcErr=ML.map(()=>G()*(0.03+0.25*(1-p.sens)));           // error de previsión por mes
+  const E=[],D=[],LT=[];
+  for(let d=0;d<365;d++){
+    const m=monthOf[d];
+    const season=d>=PEAK_START?1.5+0.3*(d-PEAK_START)/60:1;     // +50% a +80% en nov-dic
+    const e=p.base*(0.4*1+0.6*campMult[m])*season;              // 40% B2B, 60% B2C
+    E.push(e);
+    D.push(Math.max(0,Math.round(e*(1+0.15*G()))));
+    LT.push(Math.max(1,Math.round(p.lt*(1+0.3*(R()-0.5)))));
+  }
+  const fc=k=>{const i=k%365;return E[i]*(1+fcErr[monthOf[i]])};
+
+  function run(policyFactory){
+    const policy=policyFactory();
+    let stock=p.init,pipe=[];
+    const o={inv:[],lost:[],served:[],rop:[],soDays:0,orders:0};
+    for(let d=0;d<365;d++){
+      let arr=0;
+      pipe=pipe.filter(x=>{if(x.t<=d){arr+=x.q;return false}return true});
+      stock=Math.min(p.cap,stock+arr);
+      const s=Math.min(stock,D[d]),lost=D[d]-s;
+      stock-=s;
+      if(lost>0)o.soDays++;
+      const pos=stock+pipe.reduce((a,x)=>a+x.q,0);
+      const pl=policy(d,pos);
+      let q=0;
+      if(pos<=pl.rop)q=pl.qty(pos);
+      q=Math.max(0,Math.min(Math.round(q),p.cap-pos));
+      if(q>0){pipe.push({t:d+LT[d],q});o.orders++}
+      o.inv.push(stock);o.lost.push(lost);o.served.push(s);o.rop.push(pl.rop);
+    }
+    return o;
+  }
+
+  // Modelo tradicional: ROP y lote fijos, recalculados cada 30 días con la media del mes anterior (efecto látigo)
+  const trad=run(()=>{
+    let prev=p.base,avg=p.base,rop=p.base*p.lt,Q=p.base*12;
+    return (d)=>{
+      if(d>0&&d%30===0){
+        avg=D.slice(d-30,d).reduce((a,b)=>a+b,0)/30;
+        const g=Math.max(0,avg/prev-1);
+        rop=avg*p.lt*(1+0.5*g);
+        Q=avg*12*(1+g);
+        prev=avg;
+      }
+      return {rop,qty:()=>Q};
+    };
+  });
+
+  // Gemelo digital: ROP dinámico con previsión comercial a 30 días
+  const z=1+1.2*p.sens, ltE=p.lt*1.1;
+  const twin=run(()=>(d)=>{
+    let sLt=0,s30=0;
+    const n=Math.ceil(ltE);
+    for(let k=1;k<=30;k++){const f=fc(d+k);s30+=f;if(k<=n)sLt+=f}
+    const rate=0.6*(sLt/n)+0.4*(s30/30);
+    const SS=z*rate*Math.sqrt(0.0225*ltE+Math.pow(0.09*p.lt,2));
+    const rop=rate*ltE+SS, S=rate*(ltE+7)+SS;
+    return {rop,qty:pos=>S-pos};
+  });
+
+  // Métricas
+  const totalD=D.reduce((a,b)=>a+b,0);
+  const sum=a=>a.reduce((x,y)=>x+y,0);
+  const cumTot=[],cumSO=[],cumHold=[];
+  let cs=0,ch=0;
+  for(let d=0;d<365;d++){
+    cs+=(trad.lost[d]-twin.lost[d])*MARGIN;
+    ch+=(trad.inv[d]-twin.inv[d])*HOLD;
+    cumSO.push(cs);cumHold.push(ch);cumTot.push(cs+ch);
+  }
+  const monthly=ML.map((n,m)=>{
+    const a=monthStart[m],b=a+n,sl=(arr)=>sum(arr.slice(a,b));
+    return {tS:sl(trad.served),dS:sl(twin.served),tL:sl(trad.lost),dL:sl(twin.lost)};
+  });
+  return {D,trad,twin,totalD,monthly,cumTot,cumSO,cumHold,
+    servedT:sum(trad.served),servedD:sum(twin.served),
+    lostT:sum(trad.lost),lostD:sum(twin.lost),
+    avgInvT:sum(trad.inv)/365,avgInvD:sum(twin.inv)/365};
+}
+
+/* ---------- Gráficos ---------- */
+Chart.defaults.color='#94a3b8';
+Chart.defaults.font.family="'Segoe UI',system-ui,sans-serif";
+Chart.defaults.borderColor='#1c3446';
+const labels=Array.from({length:365},(_,i)=>i+1);
+const tickMonth=v=>{const i=monthStart.indexOf(v);return i>=0?MN[i]:''};
+const xScale={ticks:{autoSkip:false,maxRotation:0,callback:function(v){return tickMonth(v)}},grid:{display:false}};
+
+const bandPlugin={
+  id:'bands',
+  beforeDatasetsDraw(chart){
+    const {ctx,chartArea:a,scales:{x}}=chart;
+    const band=(d0,d1,color)=>{
+      const x0=x.getPixelForValue(d0),x1=x.getPixelForValue(d1);
+      ctx.fillStyle=color;ctx.fillRect(x0,a.top,x1-x0,a.bottom-a.top);
+    };
+    ctx.save();
+    CAMP.forEach(m=>band(monthStart[m],monthStart[m]+ML[m]-1,'rgba(56,189,248,0.13)'));
+    band(PEAK_START,364,'rgba(251,146,60,0.16)');
+    ctx.restore();
+  }
+};
+
+let charts={};
+function mk(id,cfg){if(charts[id])charts[id].destroy();charts[id]=new Chart($(id),cfg)}
+
+function render(r,p){
+  mk('c1',{
+    type:'line',plugins:[bandPlugin],
+    data:{labels,datasets:[
+      {label:'Tradicional (reactivo)',data:r.trad.inv,borderColor:'#f87171',backgroundColor:'#f87171',borderWidth:1.6,pointRadius:0,tension:0.1},
+      {label:'Gemelo Digital RevOps',data:r.twin.inv,borderColor:'#2dd4bf',backgroundColor:'#2dd4bf',borderWidth:1.8,pointRadius:0,tension:0.1},
+      {label:'ROP dinámico (IA)',data:r.twin.rop.map(v=>Math.round(v)),borderColor:'#facc15',borderDash:[5,4],borderWidth:1.2,pointRadius:0,tension:0.1},
+      {label:'Capacidad máxima',data:labels.map(()=>p.cap),borderColor:'#64748b',borderDash:[2,4],borderWidth:1,pointRadius:0}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,animation:{duration:900},
+      interaction:{mode:'index',intersect:false},
+      plugins:{legend:{labels:{usePointStyle:true,boxWidth:8}},
+        tooltip:{callbacks:{title:i=>'Día '+i[0].label+' · '+MN[monthOf[i[0].dataIndex]]}}},
+      scales:{x:xScale,y:{min:0,title:{display:true,text:'Unidades en bodega'}}}}
+  });
+
+  mk('c2',{
+    data:{labels:MN,datasets:[
+      {type:'bar',label:'Ventas perdidas tradicional',data:r.monthly.map(m=>m.tL),backgroundColor:'#f87171bb',yAxisID:'y2',order:2},
+      {type:'bar',label:'Ventas perdidas Gemelo',data:r.monthly.map(m=>m.dL),backgroundColor:'#2dd4bfbb',yAxisID:'y2',order:2},
+      {type:'line',label:'Atendidas tradicional',data:r.monthly.map(m=>m.tS),borderColor:'#fca5a5',backgroundColor:'#fca5a5',tension:0.3,yAxisID:'y',order:1},
+      {type:'line',label:'Atendidas Gemelo',data:r.monthly.map(m=>m.dS),borderColor:'#5eead4',backgroundColor:'#5eead4',tension:0.3,yAxisID:'y',order:1}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{labels:{usePointStyle:true,boxWidth:8}}},
+      scales:{x:{grid:{display:false}},
+        y:{position:'left',min:0,title:{display:true,text:'Atendidas (uds.)'}},
+        y2:{position:'right',min:0,grid:{drawOnChartArea:false},title:{display:true,text:'Perdidas (uds.)'}}}}
+  });
+
+  mk('c3',{
+    type:'line',
+    data:{labels,datasets:[
+      {label:'Ahorro total',data:r.cumTot.map(Math.round),borderColor:'#fbbf24',backgroundColor:'rgba(251,191,36,0.18)',fill:true,borderWidth:2,pointRadius:0,tension:0.1},
+      {label:'Por stock-outs evitados',data:r.cumSO.map(Math.round),borderColor:'#2dd4bf',borderWidth:1.2,pointRadius:0,tension:0.1},
+      {label:'Por menor coste de almacén',data:r.cumHold.map(Math.round),borderColor:'#38bdf8',borderWidth:1.2,pointRadius:0,tension:0.1}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,animation:{duration:900},
+      interaction:{mode:'index',intersect:false},
+      plugins:{legend:{labels:{usePointStyle:true,boxWidth:8}},
+        tooltip:{callbacks:{title:i=>'Día '+i[0].label,label:c=>c.dataset.label+': '+eur(c.parsed.y)}}},
+      scales:{x:xScale,y:{title:{display:true,text:'€ acumulados'},ticks:{callback:v=>fmt(v)}}}}
+  });
+}
+
+function kpis(r){
+  const fT=r.servedT/r.totalD*100,fD=r.servedD/r.totalD*100;
+  const daysT=r.trad.soDays,daysD=r.twin.soDays;
+  const save=r.cumTot[364];
+  $('k-served').textContent=fmt(r.servedD)+' uds.';
+  $('k-served-sub').textContent='Tradicional: '+fmt(r.servedT)+' · Demanda total: '+fmt(r.totalD);
+  $('k-fill').textContent=fD.toFixed(1).replace('.',',')+' %';
+  $('k-fill-sub').textContent='Tradicional: '+fT.toFixed(1).replace('.',',')+' % ('+(fD>=fT?'+':'')+(fD-fT).toFixed(1).replace('.',',')+' pp)';
+  $('k-days').textContent=(daysT-daysD)+' días';
+  $('k-days-sub').textContent='Con stock-out: tradicional '+daysT+' · Gemelo '+daysD;
+  $('k-save').textContent=eur(save);
+  $('k-save-sub').textContent='Ventas recuperadas '+eur(r.cumSO[364])+' · Almacén '+eur(r.cumHold[364]);
+  const invDiff=(1-r.avgInvD/r.avgInvT)*100;
+  $('insight').querySelector('span').textContent=
+    'El gemelo digital recupera '+fmt(r.lostT-r.lostD)+' unidades que el modelo reactivo pierde por roturas de stock, y mantiene un inventario medio de '+
+    fmt(r.avgInvD)+' uds. frente a '+fmt(r.avgInvT)+' del modelo tradicional ('+(invDiff>=0?'':'+')+(-invDiff).toFixed(1).replace('.',',')+' % de variación). '+
+    'El modelo reactivo sufre roturas al entrar en temporada alta y acumula excedente después de las campañas.';
+}
+
+function labelsUpdate(){
+  $('v-init').textContent=fmt($('init').value);
+  $('v-cap').textContent=fmt($('cap').value);
+  $('v-lt').textContent=$('lt').value+' días';
+  $('v-sens').textContent=$('sens').value+' %';
+  $('v-base').textContent=$('base').value;
+}
+
+function execute(){
+  const p={init:+$('init').value,cap:+$('cap').value,lt:+$('lt').value,sens:+$('sens').value/100,base:+$('base').value,seed:+$('seed').value||1};
+  p.init=Math.min(p.init,p.cap);
+  const r=simulate(p);
+  kpis(r);render(r,p);
+}
+
+['init','cap','lt','sens','base'].forEach(id=>$(id).addEventListener('input',labelsUpdate));
+$('run').addEventListener('click',execute);
+$('rand').addEventListener('click',()=>{$('seed').value=Math.floor(Math.random()*100000);execute()});
+labelsUpdate();
+lucide.createIcons();
+execute();
+</script>
+</body>
+</html>
